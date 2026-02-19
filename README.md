@@ -62,7 +62,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vfxbro/hysteria2-install/mas
 1. Скрипт проверит ОС и определит IP сервера
 2. Предложит выбрать:
    - **Порт** (по умолчанию 443)
-   - **Сайт для маскировки** (microsoft.com, google.com, apple.com или свой)
+   - **Сайт для маскировки** (bing.com, google.com, apple.com или свой)
    - **Лимит скорости** (100 / 200 / 500 Mbps или без лимита)
 3. Установит Hysteria 2, сгенерирует сертификат и пароль
 4. Запустит сервер
@@ -76,11 +76,11 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vfxbro/hysteria2-install/mas
   Сервер:      123.456.789.0
   Порт:        443
   Пароль:      xK7m9...сгенерированный...
-  SNI:         www.microsoft.com
+  SNI:         www.bing.com
   Insecure:    true
 
 URI-ссылка (скопируйте в клиент):
-hy2://xK7m9...@123.456.789.0:443?sni=www.microsoft.com&insecure=1#Hysteria2
+hy2://xK7m9...@123.456.789.0:443?sni=www.bing.com&insecure=1#Hysteria2
 ```
 
 ### Повторный запуск
@@ -125,7 +125,7 @@ hysteria version
 openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) \
   -keyout /etc/hysteria/key.pem \
   -out /etc/hysteria/cert.pem \
-  -subj "/CN=microsoft.com" \
+  -subj "/CN=bing.com" \
   -days 3650
 ```
 
@@ -161,7 +161,7 @@ auth:
 masquerade:
   type: proxy
   proxy:
-    url: https://www.microsoft.com
+    url: https://www.bing.com
     rewriteHost: true
 
 bandwidth:
@@ -217,7 +217,7 @@ dpkg-reconfigure -plow unattended-upgrades
 Самый простой способ — сформировать ссылку и вставить в любой клиент:
 
 ```
-hy2://ВАШ_ПАРОЛЬ@ВАШ_IP:443?sni=www.microsoft.com&insecure=1#MyProxy
+hy2://ВАШ_ПАРОЛЬ@ВАШ_IP:443?sni=www.bing.com&insecure=1#MyProxy
 ```
 
 > При автоматической установке скрипт выдаст готовую ссылку.
@@ -231,7 +231,7 @@ hy2://ВАШ_ПАРОЛЬ@ВАШ_IP:443?sni=www.microsoft.com&insecure=1#MyProxy
    - Адрес: `ВАШ_IP`
    - Порт: `443`
    - Пароль: из конфига
-   - SNI: `www.microsoft.com`
+   - SNI: `www.bing.com`
    - Allow Insecure: **Вкл**
 4. Подключитесь
 
@@ -243,7 +243,7 @@ hy2://ВАШ_ПАРОЛЬ@ВАШ_IP:443?sni=www.microsoft.com&insecure=1#MyProxy
    - Адрес: `ВАШ_IP`
    - Порт: `443`
    - Пароль: из конфига
-   - SNI: `www.microsoft.com`
+   - SNI: `www.bing.com`
    - Skip Cert Verify: **On**
 
 ### Windows / macOS — Hiddify
@@ -254,7 +254,7 @@ hy2://ВАШ_ПАРОЛЬ@ВАШ_IP:443?sni=www.microsoft.com&insecure=1#MyProxy
    - Server: `ВАШ_IP`
    - Port: `443`
    - Password: из конфига
-   - SNI: `www.microsoft.com`
+   - SNI: `www.bing.com`
    - Insecure: `true`
 
 ### Проверка подключения
