@@ -91,8 +91,8 @@ choose_port() {
 choose_masquerade() {
     echo ""
     echo -e "${CYAN}Сайт для маскировки (что увидит цензор):${NC}"
-    echo "  1) microsoft.com (рекомендуется)"
-    echo "  2) google.com"
+    echo "  1) bing.com (рекомендуется)"
+    echo "  2) microsoft.com"
     echo "  3) apple.com"
     echo "  4) Ввести свой"
     echo ""
@@ -100,19 +100,19 @@ choose_masquerade() {
     mask_choice=${mask_choice:-1}
 
     case $mask_choice in
-        1) MASQ_URL="https://www.microsoft.com" ;;
-        2) MASQ_URL="https://www.google.com" ;;
+        1) MASQ_URL="https://www.bing.com" ;;
+        2) MASQ_URL="https://www.microsoft.com" ;;
         3) MASQ_URL="https://www.apple.com" ;;
         4)
             read -rp "Введите URL (https://...): " custom_url
             if [[ "$custom_url" =~ ^https:// ]]; then
                 MASQ_URL="$custom_url"
             else
-                print_err "URL должен начинаться с https://, используем microsoft.com"
-                MASQ_URL="https://www.microsoft.com"
+                print_err "URL должен начинаться с https://, используем bing.com"
+                MASQ_URL="https://www.bing.com"
             fi
             ;;
-        *) MASQ_URL="https://www.microsoft.com" ;;
+        *) MASQ_URL="https://www.bing.com" ;;
     esac
 
     # Извлекаем домен для SNI
