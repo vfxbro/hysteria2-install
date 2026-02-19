@@ -167,11 +167,13 @@ generate_cert() {
     echo ""
     print_warn "Генерация TLS-сертификата..."
     mkdir -p /etc/hysteria
+    chown hysteria:hysteria /etc/hysteria
     openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) \
         -keyout /etc/hysteria/key.pem \
         -out /etc/hysteria/cert.pem \
         -subj "/CN=$MASQ_DOMAIN" \
         -days 3650 2>/dev/null
+    chown hysteria:hysteria /etc/hysteria/cert.pem /etc/hysteria/key.pem
     chmod 644 /etc/hysteria/cert.pem
     chmod 600 /etc/hysteria/key.pem
     print_ok "Сертификат создан (срок: 10 лет)"
@@ -206,7 +208,8 @@ bandwidth:
 ignoreClientBandwidth: false
 EOF
 
-    chmod 600 /etc/hysteria/config.yaml
+    chown hysteria:hysteria /etc/hysteria/config.yaml
+    chmod 640 /etc/hysteria/config.yaml
     print_ok "Конфигурация создана"
 }
 
