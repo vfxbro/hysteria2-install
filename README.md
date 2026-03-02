@@ -62,7 +62,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/vfxbro/hysteria2-install/mas
 1. Скрипт проверит ОС и определит IP сервера
 2. Предложит выбрать:
    - **Порт** (по умолчанию 443)
-   - **Сайт для маскировки** (bing.com, google.com, apple.com или свой)
+   - **Сайт для маскировки** (bing.com, microsoft.com, apple.com или свой)
    - **Лимит скорости** (100 / 200 / 500 Mbps или без лимита)
 3. Установит Hysteria 2, сгенерирует сертификат и пароль
 4. Запустит сервер
@@ -125,7 +125,7 @@ hysteria version
 openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) \
   -keyout /etc/hysteria/key.pem \
   -out /etc/hysteria/cert.pem \
-  -subj "/CN=bing.com" \
+  -subj "/CN=www.bing.com" \
   -days 3650
 ```
 
@@ -134,10 +134,12 @@ openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) \
 ### Шаг 4: Генерация пароля
 
 ```bash
-openssl rand -base64 24
+openssl rand -base64 32 | tr -d '/+=' | head -c 24
 ```
 
 Запишите результат — это пароль для подключения.
+
+> Пароль генерируется без спецсимволов (`/`, `+`, `=`), чтобы безопасно использовать его в URI-ссылке.
 
 ### Шаг 5: Создание конфигурации
 
@@ -171,6 +173,8 @@ bandwidth:
 ignoreClientBandwidth: false
 ```
 
+> Если не нужен лимит скорости — удалите секцию `bandwidth` и строку `ignoreClientBandwidth` целиком.
+
 Сохраните: `Ctrl+O` → `Enter` → `Ctrl+X`
 
 #### Что значит каждая строка
@@ -181,9 +185,18 @@ ignoreClientBandwidth: false
 | `tls` | Путь к сертификатам шифрования |
 | `auth` | Пароль для подключения клиентов |
 | `masquerade` | Маскировка — при обращении к IP в браузере покажется Bing |
-| `bandwidth` | Лимит скорости на каждого клиента |
+| `bandwidth` | Лимит скорости на каждого клиента (уберите для безлимита) |
 
-### Шаг 6: Запуск
+### Шаг 6: Права доступа
+
+```bash
+chown hysteria:hysteria /etc/hysteria /etc/hysteria/cert.pem /etc/hysteria/key.pem /etc/hysteria/config.yaml
+chmod 644 /etc/hysteria/cert.pem
+chmod 600 /etc/hysteria/key.pem
+chmod 640 /etc/hysteria/config.yaml
+```
+
+### Шаг 7: Запуск
 
 ```bash
 systemctl enable hysteria-server
@@ -197,7 +210,7 @@ systemctl status hysteria-server
 
 Должно быть **active (running)**.
 
-### Шаг 7: Базовая безопасность
+### Шаг 8: Базовая безопасность
 
 ```bash
 # Сменить пароль root
@@ -292,8 +305,8 @@ hy2://ВАШ_ПАРОЛЬ@ВАШ_IP:443?sni=www.bing.com&insecure=1#MyProxy
 |---|---|
 | Не подключается | Проверьте что UDP 443 не заблокирован хостером |
 | `connection refused` | `systemctl status hysteria-server` — смотрите логи |
-| Медленная скорость | Увеличьте `bandwidth` в конфиге или уберите лимит |
-| Сертификат истёк | Перегенерируйте сертификат и перезапустите сервис |
+| Медленная скорость | Увеличьте `bandwidth` в конфиге или уберите секцию целиком |
+| Сертификат истёк | Перегенерируйте сертификат (шаг 3) и перезапустите сервис |
 | Логи показывают ошибки | `journalctl -u hysteria-server -e --no-pager` |
 
 ---

@@ -15,18 +15,40 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# Имя systemd-сервиса (стандартное от get.hy2.sh)
+SERVICE_NAME="hysteria-server"
+
 print_banner() {
     echo -e "${CYAN}"
-    echo "╔══════════════════════════════════════╗"
-    echo "║     Hysteria 2 — Установка прокси       ║"
-    echo "║          Скрипт в 1 клик             ║"
-    echo "╚══════════════════════════════════════╝"
+    echo "╔════════════════════════════════════════╗"
+    echo "║    Hysteria 2 — Установка прокси       ║"
+    echo "║          Скрипт в 1 клик               ║"
+    echo "╚════════════════════════════════════════╝"
     echo -e "${NC}"
 }
 
 print_ok() { echo -e "${GREEN}[OK]${NC} $1"; }
 print_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 print_err() { echo -e "${RED}[ОШИБКА]${NC} $1"; }
+
+# URL-кодирование строки
+urlencode() {
+    local string="$1"
+    python3 -c "import urllib.parse; print(urllib.parse.quote('$string', safe=''))" 2>/dev/null \
+        || printf '%s' "$string" | curl -Gso /dev/null -w '%{url_effective}' --data-urlencode @- '' 2>/dev/null | sed 's/^.\{2\}//'
+}
+
+# Определение активного сервиса Hysteria
+detect_service() {
+    if systemctl is-active --quiet hysteria-server 2>/dev/null; then
+        SERVICE_NAME="hysteria-server"
+        return 0
+    elif systemctl is-active --quiet hysteria 2>/dev/null; then
+        SERVICE_NAME="hysteria"
+        return 0
+    fi
+    return 1
+}
 
 # Проверка root
 check_root() {
@@ -55,9 +77,9 @@ get_ip() {
     print_ok "IP сервера: $SERVER_IP"
 }
 
-# Генерация пароля
+# Генерация пароля (только буквы и цифры — безопасно для URI)
 generate_password() {
-    PASSWORD=$(openssl rand -base64 24)
+    PASSWORD=$(openssl rand -base64 32 | tr -d '/+=' | head -c 24)
     print_ok "Пароль сгенерирован"
 }
 
@@ -133,13 +155,18 @@ choose_bandwidth() {
     bw_choice=${bw_choice:-1}
 
     case $bw_choice in
-        1) BW_UP="100 mbps"; BW_DOWN="100 mbps" ;;
-        2) BW_UP="200 mbps"; BW_DOWN="200 mbps" ;;
-        3) BW_UP="500 mbps"; BW_DOWN="500 mbps" ;;
-        4) BW_UP="0 mbps"; BW_DOWN="0 mbps" ;;
-        *) BW_UP="100 mbps"; BW_DOWN="100 mbps" ;;
+        1) BW_UP="100 mbps"; BW_DOWN="100 mbps"; NO_BW_LIMIT=false ;;
+        2) BW_UP="200 mbps"; BW_DOWN="200 mbps"; NO_BW_LIMIT=false ;;
+        3) BW_UP="500 mbps"; BW_DOWN="500 mbps"; NO_BW_LIMIT=false ;;
+        4) NO_BW_LIMIT=true ;;
+        *) BW_UP="100 mbps"; BW_DOWN="100 mbps"; NO_BW_LIMIT=false ;;
     esac
-    print_ok "Скорость: up=$BW_UP / down=$BW_DOWN"
+
+    if [ "$NO_BW_LIMIT" = true ]; then
+        print_ok "Скорость: без лимита"
+    else
+        print_ok "Скорость: up=$BW_UP / down=$BW_DOWN"
+    fi
 }
 
 # Установка зависимостей
@@ -167,13 +194,12 @@ generate_cert() {
     echo ""
     print_warn "Генерация TLS-сертификата..."
     mkdir -p /etc/hysteria
-    chown hysteria:hysteria /etc/hysteria
     openssl req -x509 -nodes -newkey ec:<(openssl ecparam -name prime256v1) \
         -keyout /etc/hysteria/key.pem \
         -out /etc/hysteria/cert.pem \
         -subj "/CN=$MASQ_DOMAIN" \
         -days 3650 2>/dev/null
-    chown hysteria:hysteria /etc/hysteria/cert.pem /etc/hysteria/key.pem
+    chown hysteria:hysteria /etc/hysteria /etc/hysteria/cert.pem /etc/hysteria/key.pem
     chmod 644 /etc/hysteria/cert.pem
     chmod 600 /etc/hysteria/key.pem
     print_ok "Сертификат создан (срок: 10 лет)"
@@ -184,7 +210,26 @@ create_config() {
     echo ""
     print_warn "Создание конфигурации..."
 
-    cat > /etc/hysteria/config.yaml << EOF
+    if [ "$NO_BW_LIMIT" = true ]; then
+        cat > /etc/hysteria/config.yaml << EOF
+listen: :${PORT}
+
+tls:
+  cert: /etc/hysteria/cert.pem
+  key: /etc/hysteria/key.pem
+
+auth:
+  type: password
+  password: ${PASSWORD}
+
+masquerade:
+  type: proxy
+  proxy:
+    url: ${MASQ_URL}
+    rewriteHost: true
+EOF
+    else
+        cat > /etc/hysteria/config.yaml << EOF
 listen: :${PORT}
 
 tls:
@@ -207,6 +252,7 @@ bandwidth:
 
 ignoreClientBandwidth: false
 EOF
+    fi
 
     chown hysteria:hysteria /etc/hysteria/config.yaml
     chmod 640 /etc/hysteria/config.yaml
@@ -217,27 +263,35 @@ EOF
 start_service() {
     echo ""
     print_warn "Запуск Hysteria 2..."
-    systemctl enable hysteria-server > /dev/null 2>&1
-    systemctl restart hysteria-server
+
+    # Останавливаем альтернативный сервис, если есть
+    systemctl stop hysteria 2>/dev/null || true
+    systemctl disable hysteria 2>/dev/null || true
+
+    SERVICE_NAME="hysteria-server"
+    systemctl enable "$SERVICE_NAME" > /dev/null 2>&1
+    systemctl restart "$SERVICE_NAME"
     sleep 2
 
-    if systemctl is-active --quiet hysteria-server; then
+    if systemctl is-active --quiet "$SERVICE_NAME"; then
         print_ok "Hysteria 2 запущена и работает!"
     else
         print_err "Не удалось запустить. Логи:"
-        journalctl -u hysteria-server -n 20 --no-pager
+        journalctl -u "$SERVICE_NAME" -n 20 --no-pager
         exit 1
     fi
 }
 
 # Вывод результата
 print_result() {
-    URI="hy2://${PASSWORD}@${SERVER_IP}:${PORT}?sni=${MASQ_DOMAIN}&insecure=1#Hysteria2"
+    local ENCODED_PASS
+    ENCODED_PASS=$(urlencode "$PASSWORD")
+    URI="hy2://${ENCODED_PASS}@${SERVER_IP}:${PORT}?sni=${MASQ_DOMAIN}&insecure=1#Hysteria2"
 
     echo ""
-    echo -e "${GREEN}╔══════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║         УСТАНОВКА ЗАВЕРШЕНА УСПЕШНО!             ║${NC}"
-    echo -e "${GREEN}╚══════════════════════════════════════════════════╝${NC}"
+    echo -e "${GREEN}╔════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║       УСТАНОВКА ЗАВЕРШЕНА УСПЕШНО!         ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${CYAN}Данные для подключения:${NC}"
     echo -e "  Протокол:    ${GREEN}Hysteria 2${NC}"
@@ -256,9 +310,9 @@ print_result() {
     echo "  Windows/Mac: Hiddify (github.com/hiddify/hiddify-app)"
     echo ""
     echo -e "${CYAN}Управление:${NC}"
-    echo "  Статус:      systemctl status hysteria-server"
-    echo "  Перезапуск:  systemctl restart hysteria-server"
-    echo "  Логи:        journalctl -u hysteria-server -f"
+    echo "  Статус:      systemctl status $SERVICE_NAME"
+    echo "  Перезапуск:  systemctl restart $SERVICE_NAME"
+    echo "  Логи:        journalctl -u $SERVICE_NAME -f"
     echo "  Конфиг:      /etc/hysteria/config.yaml"
     echo ""
 
@@ -273,6 +327,7 @@ SNI:      ${MASQ_DOMAIN}
 URI: ${URI}
 
 Конфиг: /etc/hysteria/config.yaml
+Сервис: ${SERVICE_NAME}
 EOF
     chmod 600 /root/hysteria2_info.txt
     print_ok "Данные сохранены в /root/hysteria2_info.txt"
@@ -288,19 +343,14 @@ show_info() {
     fi
 }
 
-add_client() {
-    # В Hysteria 2 с password-auth все клиенты используют один пароль
-    print_warn "Hysteria 2 с типом auth: password — один пароль для всех."
-    echo "Просто передайте URI-ссылку новому пользователю."
-    show_info
-}
-
 uninstall() {
     echo ""
     read -rp "Вы уверены? Hysteria 2 будет полностью удалена [y/N]: " confirm
     if [[ "$confirm" =~ ^[yYдД]$ ]]; then
-        systemctl stop hysteria-server 2>/dev/null
-        systemctl disable hysteria-server 2>/dev/null
+        systemctl stop hysteria-server 2>/dev/null || true
+        systemctl disable hysteria-server 2>/dev/null || true
+        systemctl stop hysteria 2>/dev/null || true
+        systemctl disable hysteria 2>/dev/null || true
         bash <(curl -fsSL https://get.hy2.sh/) --remove > /dev/null 2>&1
         rm -rf /etc/hysteria
         rm -f /root/hysteria2_info.txt
@@ -316,8 +366,8 @@ main_menu() {
     print_banner
 
     # Если Hysteria уже установлена — показываем меню управления
-    if command -v hysteria &> /dev/null && systemctl is-active --quiet hysteria-server 2>/dev/null; then
-        echo -e "${GREEN}Hysteria 2 уже установлена и работает${NC}"
+    if command -v hysteria &> /dev/null && detect_service; then
+        echo -e "${GREEN}Hysteria 2 уже установлена и работает (сервис: ${SERVICE_NAME})${NC}"
         echo ""
         echo "  1) Показать данные для подключения"
         echo "  2) Переустановить / перенастроить"
